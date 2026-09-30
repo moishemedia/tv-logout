@@ -1,8 +1,9 @@
 node_modules/
 profile/
+profiles/
 shots/
 config.json
+secrets.json
 run.log
 run.log.*
-launchd.out.log
-launchd.err.log
+launchd.*.log

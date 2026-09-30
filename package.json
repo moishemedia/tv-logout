@@ -25,9 +25,11 @@
   "author": "MoisheMedia LLC (https://moishekaufman.com)",
   "scripts": {
     "setup": "node ./cli.mjs setup",
+    "probe": "node ./cli.mjs probe",
+    "evict": "node ./cli.mjs evict",
     "check": "node ./cli.mjs check",
-    "purge": "node ./cli.mjs purge",
     "weekly": "node ./cli.mjs weekly",
+    "status": "node ./cli.mjs status",
     "schedule": "node ./cli.mjs schedule",
     "unschedule": "node ./cli.mjs unschedule"
   },
