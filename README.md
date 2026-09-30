@@ -9,13 +9,32 @@ and no credentials or cookies ever leave the machine.
 
 ## Services
 
-| Service | Mode | State |
+| Service | Mode | Status |
 |---|---|---|
-| YouTube | per-device | Working. Keeps your own TVs via a keep list. |
-| Disney+ | per-device | Working. Scoped to TV hardware, current device excluded. |
-| Netflix | per-device | Blocked: only a bulk control is offered, which signs this tool out too. Needs a re-probe once a TV is signed in. |
-| Spotify | bulk | Set up, disabled. Same self-signout risk, untested live. |
-| HBO Max | - | Unsupported: no device management exists in the web app. |
+| YouTube | per-device | **Working.** Keeps your own TVs via a keep list. |
+| Disney+ | per-device | **Working.** Scoped to TV hardware, current device excluded. |
+| Netflix | per-device | **In progress.** Adapter written; needs a re-probe with a TV signed in. |
+| Spotify | bulk | **In progress.** Adapter written and the control is matched; not yet verified live. |
+| HBO Max | — | **Investigating.** No device management exists in the web app from this region. |
+
+### What the in-progress ones are waiting on
+
+**Netflix** only rendered a bulk "Sign Out of All Devices" button, which would
+sign out this tool's own browser and force a fresh login plus an emailed code
+every run. Per-device controls are expected to appear once the account actually
+has a TV signed in, since Netflix renders per-row actions only when there is
+something to act on. That is the re-probe.
+
+**Spotify** exposes a single "Sign out everywhere". The adapter finds it, but
+that control almost certainly signs this tool out too, which would break the
+stored session each run. It stays disabled until that is tested and either
+confirmed harmless or reworked.
+
+**HBO Max** is the hard one. `max.com` is geo-blocked outright from some
+regions, and the working domain `play.hbomax.com` exposes only playback,
+subtitle and parental settings — no device list at all. `/settings/devices`
+errors. There may be a fuller site behind a US connection, which is the next
+thing to check.
 
 **per-device** walks the device list and skips anything on your keep list, so
 your own TV survives. **bulk** uses the service's own "sign out everywhere"
