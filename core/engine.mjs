@@ -56,9 +56,18 @@ export async function runAdapter(adapter, { dry = false, headful = false, keep =
     const page = ctx.pages()[0] || (await ctx.newPage());
 
     await page.goto(adapter.devicesUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
-    await page.waitForTimeout(adapter.settleMs || 5000);
 
+    // These pages redirect and hydrate on their own schedule, so poll for a
+    // decisive signal instead of guessing a fixed wait. A fixed wait either
+    // fails intermittently or makes every run needlessly slow.
     let text = await bodyText(page);
+    const settleBy = Date.now() + (adapter.maxSettleMs || 30000);
+    const decided = () => adapter.challengeRe?.test(text) || adapter.signedOutRe?.test(text)
+      || (adapter.readyRe ? adapter.readyRe.test(text) : true);
+    while (!decided() && Date.now() < settleBy) {
+      await page.waitForTimeout(2000);
+      text = await bodyText(page);
+    }
 
     // A challenge is answerable when someone is watching, and fatal otherwise.
     if (adapter.challengeRe?.test(text)) {

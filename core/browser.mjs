@@ -38,6 +38,11 @@ export async function launch(serviceId, { headless = true } = {}) {
     channel: 'chrome',
     headless,
     viewport: { width: 1400, height: 1000 },
+    // Services localise by IP, and Spotify served Spanish here. Every adapter
+    // matches on English button text, so pin the language rather than trying
+    // to translate selectors per region.
+    locale: 'en-US',
+    extraHTTPHeaders: { 'Accept-Language': 'en-US,en;q=0.9' },
     // Chrome encrypts cookies with a macOS Keychain key. Playwright's default
     // --use-mock-keychain substitutes a fake one, so real cookies decrypt to
     // garbage AND get deleted. Dropping it preserves the signed-in session.
@@ -54,7 +59,8 @@ export function openForLogin(serviceId, url) {
   if (profileInUse(dir)) throw new Error('quit the Chrome window on this profile first');
   clearStaleLock(dir);
   spawnSync(CHROME, [
-    `--user-data-dir=${dir}`, '--no-first-run', '--no-default-browser-check', url,
+    `--user-data-dir=${dir}`, '--no-first-run', '--no-default-browser-check',
+    '--lang=en-US', url,
   ], { stdio: 'ignore' });
 }
 

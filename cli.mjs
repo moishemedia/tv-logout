@@ -14,7 +14,7 @@ import { homedir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
-import { ROOT, openForLogin, launch, bodyText } from './core/browser.mjs';
+import { ROOT, openForLogin, launch, bodyText, waitForText } from './core/browser.mjs';
 import { runAdapter, log } from './core/engine.mjs';
 
 const CONFIG = join(ROOT, 'config.json');
@@ -37,9 +37,58 @@ function requireService(id) {
   process.exit(1);
 }
 
+// Is this profile already usable? A challenge counts as signed in: you only
+// get asked to verify yourself once you have authenticated.
+async function checkSession(a, { headful = false, waitMs = 0 } = {}) {
+  const ctx = await launch(a.id, { headless: !headful });
+  try {
+    const page = ctx.pages()[0] || (await ctx.newPage());
+    await page.goto(a.devicesUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForTimeout(a.settleMs || 5000);
+    let t = await bodyText(page);
+
+    // Check the signed-out signal FIRST: "ready" patterns are necessarily
+    // loose, and a login page mentioning e.g. "Supported Devices" in its footer
+    // would otherwise read as success.
+    if (a.signedOutRe?.test(t)) return { signedIn: false, challenged: false };
+
+    if (a.challengeRe?.test(t)) {
+      if (!waitMs) return { signedIn: true, challenged: true };
+      console.log('The service wants to verify it is you - approve it in the window.');
+      await page.bringToFront().catch(() => {});
+      if (await waitForText(page, a.readyRe, waitMs)) return { signedIn: true, challenged: false };
+      return { signedIn: true, challenged: true };
+    }
+    if (a.readyRe?.test(t)) return { signedIn: true, challenged: false };
+    return { signedIn: false, challenged: false };
+  } finally { await ctx.close().catch(() => {}); }
+}
+
+function enableService(id, a) {
+  const c = cfg();
+  c.services = c.services || {};
+  c.services[id] = { enabled: true, keep: c.services[id]?.keep || [] };
+  saveCfg(c);
+  console.log(`\n${a.name} is set up and enabled.`);
+  if (a.mode === 'bulk') {
+    console.log('This service uses its bulk sign-out, so ALL devices go, including yours.');
+    console.log('That is usually a short re-login on your own TV.');
+  }
+}
+
 async function cmdSetup(id) {
   requireService(id);
   const a = await loadAdapter(id);
+
+  // Skip the login window entirely when the profile already has a session.
+  const existing = await checkSession(a).catch(() => ({ signedIn: false }));
+  if (existing.signedIn) {
+    console.log(`Already signed into ${a.name}${existing.challenged ? ' (a verification prompt is pending, which is fine)' : ''}.`);
+    enableService(id, a);
+    console.log('\nNext:  npm run check');
+    return;
+  }
+
   console.log(`
 -------------------------------------------------------------
 A Chrome window will open on a profile used only for ${a.name}.
@@ -55,28 +104,15 @@ clean quit. Nothing is uploaded; the profile stays on this Mac.
   openForLogin(id, a.loginUrl);
 
   console.log('Verifying...');
-  const ctx = await launch(id, { headless: true });
-  try {
-    const page = ctx.pages()[0] || (await ctx.newPage());
-    await page.goto(a.devicesUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
-    await page.waitForTimeout(a.settleMs || 5000);
-    const t = await bodyText(page);
-    const signedIn = !a.signedOutRe?.test(t) && !/\/login|\/signin/i.test(page.url());
-    if (!signedIn) {
-      console.error(`\nSign-in did not stick. Most common cause: closing Chrome with the red button instead of Cmd+Q.`);
-      process.exit(1);
-    }
-    const c = cfg();
-    c.services = c.services || {};
-    c.services[id] = { enabled: true, keep: c.services[id]?.keep || [] };
-    saveCfg(c);
-    console.log(`\n${a.name} is set up and enabled.`);
-    if (a.mode === 'bulk') {
-      console.log('This service uses its bulk sign-out, so ALL devices go, including yours.');
-      console.log('That is usually a short re-login on your own TV.');
-    }
-    console.log('\nNext:  npm run check');
-  } finally { await ctx.close().catch(() => {}); }
+  const after = await checkSession(a);
+  if (!after.signedIn) {
+    console.error('\nSign-in did not stick. The usual cause is closing Chrome with the');
+    console.error('red button instead of Cmd+Q - closing a window does not quit Chrome,');
+    console.error('and the session is only written to disk on a clean quit.');
+    process.exit(1);
+  }
+  enableService(id, a);
+  console.log('\nNext:  npm run check');
 }
 
 // Selector archaeology. Every adapter but YouTube shipped unverified; this
