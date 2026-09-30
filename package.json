@@ -31,7 +31,8 @@
     "weekly": "node ./cli.mjs weekly",
     "status": "node ./cli.mjs status",
     "schedule": "node ./cli.mjs schedule",
-    "unschedule": "node ./cli.mjs unschedule"
+    "unschedule": "node ./cli.mjs unschedule",
+    "watchdog": "node ./watchdog.mjs"
   },
   "engines": {
     "node": ">=20"

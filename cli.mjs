@@ -16,6 +16,9 @@ import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { ROOT, openForLogin, launch, bodyText, waitForText } from './core/browser.mjs';
 import { runAdapter, log } from './core/engine.mjs';
+import {
+  notify, recordSuccess, emailFailure, flushParkedAlert, pingDeadman,
+} from './core/notify.mjs';
 
 const CONFIG = join(ROOT, 'config.json');
 const LABEL = 'com.tvlogout.weekly';
@@ -148,6 +151,7 @@ async function runMany({ dry, headful }) {
   const ids = enabled(c);
   if (!ids.length) { console.error('No services set up yet. Run:  npm run setup youtube'); process.exit(1); }
 
+  if (!dry) await flushParkedAlert(c);
   const results = [];
   for (const id of ids) {
     const a = await loadAdapter(id);
@@ -163,14 +167,20 @@ async function runMany({ dry, headful }) {
     console.log(' ', line);
   }
   const failed = results.filter((r) => r.status !== 'ok');
-  if (failed.length && !dry) await pingOrReport(c, failed);
-  return failed.length ? 1 : 0;
-}
+  if (dry) return failed.length ? 1 : 0;
 
-// The dead-man's switch only gets a ping when everything succeeded; a partial
-// run should not look healthy from the outside.
-async function pingOrReport(c, failed) {
-  log(`failures: ${failed.map((f) => `${f.name} (${f.reason})`).join('; ')}`);
+  if (failed.length) {
+    const reason = failed.map((f) => `${f.name}: ${f.reason}`).join('; ');
+    log(`failures: ${reason}`);
+    notify('tv-logout', `${failed.length} service(s) failed. Run: npm run evict`);
+    await emailFailure(c, reason);
+  } else {
+    // The dead-man's switch is only pinged when EVERY service succeeded. A
+    // partial run must not look healthy from the outside.
+    recordSuccess();
+    await pingDeadman(c);
+  }
+  return failed.length ? 1 : 0;
 }
 
 async function cmdEvict() {
@@ -178,7 +188,15 @@ async function cmdEvict() {
   process.exit(await runMany({ dry: false, headful: true }));
 }
 const cmdCheck = async () => process.exit(await runMany({ dry: true, headful: false }));
-const cmdWeekly = async () => process.exit(await runMany({ dry: false, headful: false }));
+async function cmdWeekly() {
+  // A laptop shut or off wifi at the scheduled minute should not lose its week.
+  for (let attempt = 0; ; attempt++) {
+    const code = await runMany({ dry: false, headful: false });
+    if (code === 0 || attempt >= 2) process.exit(code);
+    log(`retrying in 5 minutes (attempt ${attempt + 1} of 2)`);
+    await new Promise((r) => setTimeout(r, 5 * 60 * 1000));
+  }
+}
 
 function cmdStatus() {
   const c = cfg();
@@ -215,10 +233,39 @@ function cmdSchedule() {
   spawnSync('launchctl', ['bootout', `gui/${uid}/${LABEL}`], { stdio: 'ignore' });
   const r = spawnSync('launchctl', ['bootstrap', `gui/${uid}`, PLIST], { encoding: 'utf8' });
   if (r.status !== 0) { console.error('Could not load the schedule:', r.stderr); process.exit(1); }
-  console.log('Weekly backstop scheduled: Mondays 11:45.');
+
+  // Daily watchdog as a SEPARATE agent: if the weekly one breaks or is
+  // unloaded, something independent still notices the silence.
+  const WLABEL = `${LABEL}.watchdog`;
+  const wplist = PLIST.replace(`${LABEL}.plist`, `${WLABEL}.plist`);
+  writeFileSync(wplist, `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>${WLABEL}</string>
+  <key>ProgramArguments</key>
+  <array><string>/bin/bash</string><string>-lc</string>
+    <string>cd ${ROOT} &amp;&amp; node ./watchdog.mjs</string></array>
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>12</integer><key>Minute</key><integer>30</integer></dict>
+  <key>StandardOutPath</key><string>${join(ROOT, 'launchd.out.log')}</string>
+  <key>StandardErrorPath</key><string>${join(ROOT, 'launchd.err.log')}</string>
+  <key>ProcessType</key><string>Background</string>
+</dict>
+</plist>
+`);
+  spawnSync('launchctl', ['bootout', `gui/${uid}/${WLABEL}`], { stdio: 'ignore' });
+  const rw = spawnSync('launchctl', ['bootstrap', `gui/${uid}`, wplist], { encoding: 'utf8' });
+  if (rw.status !== 0) console.error('Watchdog did not load:', rw.stderr);
+
+  console.log('Scheduled: weekly run Mondays 11:45, watchdog daily 12:30.');
+  console.log('Remove both with:  npm run unschedule');
 }
 function cmdUnschedule() {
-  spawnSync('launchctl', ['bootout', `gui/${process.getuid()}/${LABEL}`], { stdio: 'ignore' });
+  const uid = process.getuid();
+  for (const l of [LABEL, `${LABEL}.watchdog`]) {
+    spawnSync('launchctl', ['bootout', `gui/${uid}/${l}`], { stdio: 'ignore' });
+  }
   console.log('Schedule removed.');
 }
 
