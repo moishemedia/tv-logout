@@ -22,7 +22,7 @@
     "url": "https://github.com/moishemedia/tv-logout.git"
   },
   "license": "MIT",
-  "author": "Moishe Media LLC",
+  "author": "MoisheMedia LLC",
   "scripts": {
     "setup": "node ./cli.mjs setup",
     "probe": "node ./cli.mjs probe",
