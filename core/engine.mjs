@@ -39,6 +39,25 @@ function housekeep() {
   } catch { /* best effort */ }
 }
 
+// Read device rows, retrying while the list is empty. An empty list is a
+// legitimate outcome (nothing signed in), so this waits out the grace period
+// rather than failing - it just refuses to trust an instant zero.
+async function collectRows(page, adapter, graceMs = 12000) {
+  const deadline = Date.now() + graceMs;
+  let rows = [];
+  for (;;) {
+    rows = [];
+    for (const li of await page.$$(adapter.rowSelector || 'li')) {
+      const t = ((await li.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+      if (!t || t.length > 200) continue;
+      if (adapter.rowScopeRe && !adapter.rowScopeRe.test(t)) continue;
+      rows.push({ li, text: t });
+    }
+    if (rows.length || Date.now() >= deadline) return rows;
+    await page.waitForTimeout(1500);
+  }
+}
+
 const OK = (signedOut, kept) => ({ status: 'ok', signedOut, kept });
 const FAIL = (reason) => ({ status: 'failed', reason, signedOut: [], kept: [] });
 
@@ -115,13 +134,11 @@ export async function runAdapter(adapter, { dry = false, headful = false, keep =
           await page.goto(adapter.devicesUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
           await page.waitForTimeout(adapter.settleMs || 5000);
         }
-        const rows = [];
-        for (const li of await page.$$(adapter.rowSelector || 'li')) {
-          const t = ((await li.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
-          if (!t || t.length > 200) continue;
-          if (adapter.rowScopeRe && !adapter.rowScopeRe.test(t)) continue;
-          rows.push({ li, text: t });
-        }
+        // Rows hydrate AFTER the page header, so a single immediate read can
+        // return an empty list on a page that plainly has devices - reporting
+        // "nothing to do" and silently signing nothing out. Zero is only
+        // believed once it has held for the whole grace window.
+        const rows = await collectRows(page, adapter);
         if (i === 0) log(`${tag} found ${rows.length} device row(s)`);
 
         const next = rows.find((r) => {
