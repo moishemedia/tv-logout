@@ -9,13 +9,13 @@ and no credentials or cookies ever leave the machine.
 
 ## Services
 
-| Service | Mode | Verified |
+| Service | Mode | State |
 |---|---|---|
-| YouTube | per-device | yes |
-| Netflix | bulk | not yet |
-| HBO Max | bulk | not yet |
-| Spotify | bulk | not yet |
-| Disney+ | bulk | not yet |
+| YouTube | per-device | Working. Keeps your own TVs via a keep list. |
+| Disney+ | per-device | Working. Scoped to TV hardware, current device excluded. |
+| Netflix | per-device | Blocked: only a bulk control is offered, which signs this tool out too. Needs a re-probe once a TV is signed in. |
+| Spotify | bulk | Set up, disabled. Same self-signout risk, untested live. |
+| HBO Max | - | Unsupported: no device management exists in the web app. |
 
 **per-device** walks the device list and skips anything on your keep list, so
 your own TV survives. **bulk** uses the service's own "sign out everywhere"
