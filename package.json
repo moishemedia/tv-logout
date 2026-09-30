@@ -1,0 +1,40 @@
+{
+  "name": "tv-logout",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Signs stray YouTube-on-TV sessions out of your Google Account, on a schedule, entirely on your own machine.",
+  "keywords": [
+    "youtube",
+    "google-account",
+    "sessions",
+    "sign-out",
+    "privacy",
+    "macos",
+    "automation",
+    "playwright"
+  ],
+  "homepage": "https://github.com/moishemedia/tv-logout#readme",
+  "bugs": {
+    "url": "https://github.com/moishemedia/tv-logout/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/moishemedia/tv-logout.git"
+  },
+  "license": "MIT",
+  "author": "MoisheMedia LLC (https://moishekaufman.com)",
+  "scripts": {
+    "setup": "node ./cli.mjs setup",
+    "check": "node ./cli.mjs check",
+    "purge": "node ./cli.mjs purge",
+    "weekly": "node ./cli.mjs weekly",
+    "schedule": "node ./cli.mjs schedule",
+    "unschedule": "node ./cli.mjs unschedule"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "playwright": "^1.63.0"
+  }
+}

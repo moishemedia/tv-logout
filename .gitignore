@@ -1,0 +1,8 @@
+node_modules/
+profile/
+shots/
+config.json
+run.log
+run.log.*
+launchd.out.log
+launchd.err.log
